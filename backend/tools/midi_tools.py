@@ -6,21 +6,34 @@ from pydantic import BaseModel, Field
 
 
 class Note(BaseModel):
-    pitch: int = Field(
-        ge=0,
-        le=127,
-        description="MIDI pitch number. C4 is 60."
+    # pitch: int = Field(
+    #     ge=0,
+    #     le=127,
+    #     description="MIDI pitch number. C4 is 60."
+    # )
+    pitch: str = Field(
+    description="Musical pitch name, e.g. C4, D#4, Bb3."
     )
 
-    start: float = Field(
-        ge=0,
-        description="Start time of the note in seconds."
-    )
+    # start: float = Field(
+    #     ge=0,
+    #     description="Start time of the note in seconds."
+    # )
 
-    duration: float = Field(
-        gt=0,
-        description="Duration of the note in seconds."
-    )
+    # duration: float = Field(
+    #     gt=0,
+    #     description="Duration of the note in seconds."
+    # )
+
+    start: float = Field( 
+        ge=0, 
+        description="Start position in beats." 
+        ) 
+    
+    duration: float = Field( 
+        gt=0, 
+        description="Duration in beats." 
+        )
 
     velocity: int = Field(
         default=100,
@@ -31,6 +44,7 @@ class Note(BaseModel):
 
 
 class MIDIRequest(BaseModel):
+
     notes: list[Note] = Field(
         description="List of notes that make up the melody."
     )
@@ -45,6 +59,11 @@ class MIDIRequest(BaseModel):
         gt=0,
         description="Tempo in beats per minute."
     )
+
+    time_signature: str = Field( 
+        default="4/4", 
+        description="Time signature, e.g. 4/4." 
+        )
 
 
 
@@ -92,7 +111,13 @@ class MIDIRequest(BaseModel):
 
 
 
+def pitch_to_midi(pitch: str) -> int: 
+    "C4->60"
+    return pretty_midi.note_name_to_number(pitch)
 
+def beats_to_seconds(beats: float, tempo: float) -> float: 
+    seconds_per_beat = 60.0 / tempo 
+    return beats * seconds_per_beat
 
 
 @tool
@@ -122,13 +147,22 @@ def create_midi(request: MIDIRequest) -> str:
     )
 
     for note_data in request.notes:
+        pitch = pretty_midi.note_name_to_number(note_data.pitch)
 
-        note = pretty_midi.Note(
-            velocity=note_data.velocity,
-            pitch=note_data.pitch,
-            start=note_data.start,
-            end=note_data.start + note_data.duration
-        )
+        start = beats_to_seconds( 
+            note_data.start, 
+            request.tempo 
+            ) 
+        duration = beats_to_seconds( 
+            note_data.duration, 
+            request.tempo 
+            )
+
+        note = pretty_midi.Note( 
+            velocity=note_data.velocity, 
+            pitch=pitch, 
+            start=start, 
+            end=start + duration )
 
         instrument.notes.append(note)
 
