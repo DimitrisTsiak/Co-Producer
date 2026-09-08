@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import base64
 import streamlit.components.v1 as components
+from langchain_google_genai.chat_models import GoogleModelNotFoundError, GoogleAPIError
 from backend.llm.llm_factory import create_llm
 from backend.agent.music_agent import MusicAgent
 from backend.memory.short_term_memory import ShortMemory
@@ -14,14 +15,25 @@ from backend.agent.prompts import SYSTEM_PROMPT
 load_dotenv()
 
 
-def initialize_agent():
+GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite"
+]
+
+
+
+def initialize_agent(model_name):
 
     api_key = os.getenv("GOOGLE_GEMINI_KEY")
 
     model = create_llm(
         provider="google",
         api_key=api_key,
-        name="gemini-3.5-flash-lite"
+        name=model_name
     )
 
     memory = ShortMemory(
@@ -33,6 +45,7 @@ def initialize_agent():
         memory=memory,
         tools=[create_midi]
     )
+
 
 
 # -------------------------
@@ -50,8 +63,27 @@ st.set_page_config(
 # Initialize agent
 # -------------------------
 
+
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = "gemini-3.5-flash"
+
+
+selected_model = st.sidebar.selectbox(
+    "Gemini Model",
+    GEMINI_MODELS,
+    index=GEMINI_MODELS.index(
+        st.session_state.selected_model
+    )
+)
+
 if "agent" not in st.session_state:
-    st.session_state.agent = initialize_agent()
+    st.session_state.agent = initialize_agent(selected_model)
+
+elif selected_model != st.session_state.selected_model:
+    st.session_state.selected_model = selected_model
+    st.session_state.agent = initialize_agent(
+        selected_model
+    )
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -101,11 +133,42 @@ if user_input:
 
         with st.spinner("Composing..."):
 
-            response = st.session_state.agent.invoke(
-                user_input
-            )
+            try:
+                response = st.session_state.agent.invoke(user_input)
+                
 
-        st.markdown(response[0]["text"])
+            except GoogleModelNotFoundError:
+
+                st.error(
+                    "The selected Gemini model is not available "
+                    "with your current API key.\n\n"
+                    "Please select another model from the **Gemini Model** "
+                    "menu in the sidebar."
+                )
+
+            except GoogleAPIError as e:
+
+                if "503" in str(e) or "UNAVAILABLE" in str(e):
+
+                    st.error(
+                        "⚠️ The selected Gemini model is temporarily unavailable.\n\n"
+                        "This usually means the model is experiencing high demand. "
+                        "Please wait a moment and try again, or select another model "
+                        "from the **Gemini Model** menu."
+                    )
+
+                else:
+
+                    st.error(
+                        "⚠️ Gemini encountered an API error.\n\n"
+                        f"Details: {e}"
+                    )
+
+                st.stop()
+
+                st.stop()
+        response_text = response[0]["text"]
+        st.markdown(response_text)
 
         output_dir = Path("midi_outputs")
 
@@ -153,7 +216,6 @@ if user_input:
 
         st.session_state.messages.append({
             "role": "assistant",
-            "content": response
+            "content": response_text
         })
-
 

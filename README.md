@@ -5,8 +5,11 @@ An AI-powered co-producer agent, built with Streamlit, that utilizes LLMs to gen
 ## Features
 
 - **MIDI Generation**: Instruct the LLM to create melodies with specific characteristics (e.g., "generate a piano MIDI inspired by Chopin" or "generate a dark piano chord progression").
+
 - **Iterative Revision**: Ask the agent to modify a generated piece (e.g., "add a chord progression and a bassline to the melody", or "change the chord progression to sound more sad and nostalgic").
 - **Musical Insights**: Leverage the LLM's inherent knowledge to analyze music and explain why certain melodies or progressions evoke specific moods.
+
+![image info](./1.jpg)
 
 ## Installation
 
