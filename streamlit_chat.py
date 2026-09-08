@@ -2,11 +2,14 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 from pathlib import Path
+import base64
+import streamlit.components.v1 as components
 from backend.llm.llm_factory import create_llm
 from backend.agent.music_agent import MusicAgent
 from backend.memory.short_term_memory import ShortMemory
 from backend.tools.midi_tools import create_midi
 from backend.agent.prompts import SYSTEM_PROMPT
+
 
 load_dotenv()
 
@@ -102,7 +105,7 @@ if user_input:
                 user_input
             )
 
-        st.markdown(response)
+        st.markdown(response[0]["text"])
 
         output_dir = Path("midi_outputs")
 
@@ -114,14 +117,39 @@ if user_input:
                 midi_files,
                 key=lambda p: p.stat().st_mtime
             )
+        with open(latest_midi, "rb") as f:
 
-            with open(latest_midi, "rb") as f:
-                st.download_button(
-                    label="🎹 Download MIDI",
-                    data=f,
-                    file_name=latest_midi.name,
-                    mime="audio/midi"
-                )
+            midi_data = base64.b64encode(f.read()).decode()
+
+        midi_src = f"data:audio/midi;base64,{midi_data}"
+
+        html = f"""
+        <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
+
+        <midi-player
+            src="{midi_src}"
+            sound-font
+            visualizer="#myVisualizer">
+        </midi-player>
+
+        <midi-visualizer
+            type="piano-roll"
+            id="myVisualizer">
+        </midi-visualizer>
+        """
+
+        components.html(
+            html,
+            height=400
+        )
+
+        with open(latest_midi, "rb") as f:
+            st.download_button(
+                label="🎹 Download MIDI",
+                data=f,
+                file_name=latest_midi.name,
+                mime="audio/midi"
+            )
 
         st.session_state.messages.append({
             "role": "assistant",
