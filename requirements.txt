@@ -1,0 +1,6 @@
+streamlit
+python-dotenv
+pretty_midi
+langchain-core
+langchain-google-genai
+pydantic
