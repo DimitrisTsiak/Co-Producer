@@ -28,9 +28,7 @@ GEMINI_MODELS = [
 
 
 
-def initialize_agent(model_name):
-
-    api_key = os.getenv("GOOGLE_GEMINI_KEY")
+def initialize_agent(model_name, api_key):
 
     model = create_llm(
         provider="google",
@@ -86,14 +84,45 @@ selected_model = st.sidebar.selectbox(
     )
 )
 
-if "agent" not in st.session_state:
-    st.session_state.agent = initialize_agent(selected_model)
 
-elif selected_model != st.session_state.selected_model:
+# -------------------------
+# API KEY CHECK
+# -------------------------
+
+default_key = os.getenv("GOOGLE_GEMINI_KEY") or ""
+
+st.sidebar.header("🔑 Authentication")
+api_key = st.sidebar.text_input(
+    "Gemini API Key",
+    type="password",
+    value=default_key,
+    placeholder="AIzaSy...",
+    help="Get a free Gemini API key from Google AI Studio (https://aistudio.google.com/)"
+)
+
+st.sidebar.markdown(
+    "[Get a Gemini API Key](https://aistudio.google.com/app/apikey)"
+)
+
+if not api_key:
+    st.info("👈 Please enter your Google Gemini API key in the sidebar to start composing!")
+    st.stop()
+
+
+# -------------------------
+# Initialize Agent
+# -------------------------
+if "api_key" not in st.session_state:
+    st.session_state.api_key = api_key
+
+key_changed = api_key != st.session_state.api_key
+model_changed = selected_model != st.session_state.get("selected_model")
+
+if "agent" not in st.session_state or key_changed or model_changed:
     st.session_state.selected_model = selected_model
-    st.session_state.agent = initialize_agent(
-        selected_model
-    )
+    st.session_state.api_key = api_key
+    st.session_state.agent = initialize_agent(selected_model, api_key)
+
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
