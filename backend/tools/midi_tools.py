@@ -3,6 +3,7 @@ from langchain_core.tools import tool
 import pretty_midi
 from pathlib import Path
 from pydantic import BaseModel, Field
+import uuid
 
 
 class Note(BaseModel):
@@ -168,7 +169,12 @@ def create_midi(request: MIDIRequest) -> str:
 
     midi.instruments.append(instrument)
 
+    target_file = Path(request.output_path)
+    unique_filename = f"{uuid.uuid4().hex[:6]}_{target_file.name}"
+    path = target_file.parent / unique_filename
+
     midi.write(str(path))
 
-    return f"MIDI file created successfully: {path}"
+
+    return str(path)
 

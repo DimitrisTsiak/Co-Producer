@@ -48,8 +48,7 @@ class MusicAgent:
                     result = tool.invoke(tool_args)
                     
                     if tool_name == "create_midi":
-                        req = tool_args.get("request", tool_args)
-                        generated_midi_path = req.get("output_path")
+                        generated_midi_path = str(result)
 
 
                 except Exception as e:
