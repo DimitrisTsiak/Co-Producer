@@ -27,6 +27,40 @@ GEMINI_MODELS = [
 ]
 
 
+def render_midi(midi_path: str):
+    if not midi_path or not Path(midi_path).exists():
+        return
+    path_obj = Path(midi_path)
+    with open(path_obj, "rb") as f:
+        midi_data = base64.b64encode(f.read()).decode()
+    midi_src = f"data:audio/midi;base64,{midi_data}"
+    
+
+    viz_id = f"visualizer_{path_obj.stem}"
+    html = f"""
+    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
+    <midi-player
+        src="{midi_src}"
+        sound-font
+        visualizer="#{viz_id}">
+    </midi-player>
+    <midi-visualizer
+        type="piano-roll"
+        id="{viz_id}">
+    </midi-visualizer>
+    """
+    components.html(html, height=400)
+    with open(path_obj, "rb") as f:
+        st.download_button(
+            label="🎹 Download MIDI",
+            data=f,
+            file_name=path_obj.name,
+            mime="audio/midi",
+            key=f"dl_{path_obj.stem}"  
+        )
+
+
+
 
 def initialize_agent(model_name, api_key):
 
@@ -141,10 +175,10 @@ st.caption(
 
 # Display conversation history
 for message in st.session_state.messages:
-
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
+        st.markdown(message["content"]) 
+        if message.get("midi_path"):
+            render_midi(message["midi_path"])
 
 # -------------------------
 # Chat input
@@ -213,44 +247,12 @@ if user_input:
 
         midi_path = result.get("midi_path")
 
-        if midi_path and Path(midi_path).exists():
-            path_obj = Path(midi_path)
-            with open(path_obj, "rb") as f:
-                midi_data = base64.b64encode(f.read()).decode()
-
-            midi_src = f"data:audio/midi;base64,{midi_data}"
-
-            html = f"""
-            <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
-
-            <midi-player
-                src="{midi_src}"
-                sound-font
-                visualizer="#myVisualizer">
-            </midi-player>
-
-            <midi-visualizer
-                type="piano-roll"
-                id="myVisualizer">
-            </midi-visualizer>
-            """
-
-            components.html(
-                html,
-                height=400
-            )
-
-            with open(path_obj, "rb") as f:
-                st.download_button(
-                    label="🎹 Download MIDI",
-                    data=f,
-                    file_name=path_obj.name,
-                    mime="audio/midi"
-                )
-
+        if midi_path:
+            render_midi(midi_path)
 
         st.session_state.messages.append({
             "role": "assistant",
-            "content": response_text
+            "content": response_text,
+            "midi_path": midi_path
         })
 
