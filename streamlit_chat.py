@@ -1,7 +1,9 @@
+from backend.tools import midi_tools
 import os
 import streamlit as st
 from dotenv import load_dotenv
 from pathlib import Path
+import uuid
 import base64
 import streamlit.components.v1 as components
 from langchain_google_genai.chat_models import GoogleModelNotFoundError, GoogleAPIError
@@ -46,6 +48,14 @@ def initialize_agent(model_name):
         tools=[create_midi]
     )
 
+# # -------------------------
+# # Session Configuration
+# # -------------------------
+
+# if "session_id" not in st.session_state:
+#     st.session_state.session_id = str(uuid.uuid4())[:8]  
+#     st.session_state.user_dir = Path("midi_outputs") / st.session_state.session_id
+#     st.session_state.user_dir.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------
@@ -134,7 +144,7 @@ if user_input:
         with st.spinner("Composing..."):
 
             try:
-                response = st.session_state.agent.invoke(user_input)
+                result = st.session_state.agent.invoke(user_input)
                 
 
             except GoogleModelNotFoundError:
@@ -167,52 +177,48 @@ if user_input:
                 st.stop()
 
                 st.stop()
-        response_text = response[0]["text"]
+                
+        
+        response_text = result["content"][0]['text']
         st.markdown(response_text)
 
-        output_dir = Path("midi_outputs")
+        midi_path = result.get("midi_path")
 
-        # Download midi
-        midi_files = list(output_dir.glob("*.mid"))
+        if midi_path and Path(midi_path).exists():
+            path_obj = Path(midi_path)
+            with open(path_obj, "rb") as f:
+                midi_data = base64.b64encode(f.read()).decode()
 
-        if midi_files:
-            latest_midi = max(
-                midi_files,
-                key=lambda p: p.stat().st_mtime
+            midi_src = f"data:audio/midi;base64,{midi_data}"
+
+            html = f"""
+            <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
+
+            <midi-player
+                src="{midi_src}"
+                sound-font
+                visualizer="#myVisualizer">
+            </midi-player>
+
+            <midi-visualizer
+                type="piano-roll"
+                id="myVisualizer">
+            </midi-visualizer>
+            """
+
+            components.html(
+                html,
+                height=400
             )
-        with open(latest_midi, "rb") as f:
 
-            midi_data = base64.b64encode(f.read()).decode()
+            with open(path_obj, "rb") as f:
+                st.download_button(
+                    label="🎹 Download MIDI",
+                    data=f,
+                    file_name=path_obj.name,
+                    mime="audio/midi"
+                )
 
-        midi_src = f"data:audio/midi;base64,{midi_data}"
-
-        html = f"""
-        <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
-
-        <midi-player
-            src="{midi_src}"
-            sound-font
-            visualizer="#myVisualizer">
-        </midi-player>
-
-        <midi-visualizer
-            type="piano-roll"
-            id="myVisualizer">
-        </midi-visualizer>
-        """
-
-        components.html(
-            html,
-            height=400
-        )
-
-        with open(latest_midi, "rb") as f:
-            st.download_button(
-                label="🎹 Download MIDI",
-                data=f,
-                file_name=latest_midi.name,
-                mime="audio/midi"
-            )
 
         st.session_state.messages.append({
             "role": "assistant",

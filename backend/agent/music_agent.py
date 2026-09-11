@@ -22,15 +22,19 @@ class MusicAgent:
             "content": user_input
         })
 
+        generated_midi_path = None
+
         while True:
 
             messages = self.memory.get()
             response = self.model_with_tools.invoke(messages)
-
             self.memory.add(response)
 
             if not response.tool_calls:
-                return response.content
+                return {
+                    "content": response.content,
+                    "midi_path": generated_midi_path
+                }
 
             # Execute tools
             for tool_call in response.tool_calls:
@@ -42,6 +46,11 @@ class MusicAgent:
 
                 try:
                     result = tool.invoke(tool_args)
+                    
+                    if tool_name == "create_midi":
+                        req = tool_args.get("request", tool_args)
+                        generated_midi_path = req.get("output_path")
+
 
                 except Exception as e:
                     result = f"Tool execution failed: {e}"
