@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 import base64
 import streamlit.components.v1 as components
-from langchain_google_genai.chat_models import GoogleModelNotFoundError, GoogleAPIError
+from langchain_google_genai.chat_models import GoogleModelNotFoundError, GoogleAPIError, GoogleRateLimitError, GoogleInvalidRequestError
 from backend.llm.llm_factory import create_llm
 from backend.agent.music_agent import MusicAgent
 from backend.memory.short_term_memory import ShortMemory
@@ -209,7 +209,10 @@ if user_input:
             try:
                 result = st.session_state.agent.invoke(user_input)
                 
-
+            except GoogleInvalidRequestError:
+                st.error("The provided API key is not valid. Please provide a valid Google API key.")
+                st.stop()
+            
             except GoogleModelNotFoundError:
 
                 st.error(
@@ -218,6 +221,16 @@ if user_input:
                     "Please select another model from the **Gemini Model** "
                     "menu in the sidebar."
                 )
+                st.stop()
+
+            except GoogleRateLimitError:
+
+                st.error(
+                    "⚠️ Gemini API rate limit reached.\n\n"
+                    "Please wait a moment and try again, or select another model."
+                )
+                st.stop()
+
 
             except GoogleAPIError as e:
 
@@ -229,6 +242,7 @@ if user_input:
                         "Please wait a moment and try again, or select another model "
                         "from the **Gemini Model** menu."
                     )
+                    
 
                 else:
 
@@ -239,7 +253,7 @@ if user_input:
 
                 st.stop()
 
-                st.stop()
+
                 
         
         response_text = result["content"][0]['text']
