@@ -138,6 +138,10 @@ st.sidebar.markdown(
     "[Get a Gemini API Key](https://aistudio.google.com/app/apikey)"
 )
 
+st.sidebar.markdown(
+    "[Check the source code on GitHub](https://github.com/DimitrisTsiak/Co-Producer)"
+)
+
 if not api_key:
     st.info("👈 Please enter your Google Gemini API key in the sidebar to start composing!")
     st.stop()
@@ -169,7 +173,7 @@ if "messages" not in st.session_state:
 st.title("🎵 Music Generation Agent")
 
 st.caption(
-    "Describe a melody or ask the agent to modify your existing composition."
+    "Describe a melody or ask the agent to modify your existing midi composition."
 )
 
 
@@ -185,7 +189,7 @@ for message in st.session_state.messages:
 # -------------------------
 
 user_input = st.chat_input(
-    "Describe the music you want..."
+    "Describe the melody you want (e.g. a dark piano midi)..."
 )
 
 
@@ -269,4 +273,3 @@ if user_input:
             "content": response_text,
             "midi_path": midi_path
         })
-
