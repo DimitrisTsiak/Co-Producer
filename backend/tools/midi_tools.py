@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import uuid
-
 from langchain_core.tools import tool
 import pretty_midi
 from pydantic import BaseModel, Field

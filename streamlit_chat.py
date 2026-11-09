@@ -6,13 +6,15 @@ from pathlib import Path
 import uuid
 import base64
 import streamlit.components.v1 as components
+from langchain_core.globals import set_debug
 from langchain_google_genai.chat_models import GoogleModelNotFoundError, GoogleAPIError, GoogleRateLimitError, GoogleInvalidRequestError
 from backend.llm.llm_factory import create_llm
 from backend.agent.music_agent import MusicAgent
 from backend.memory.short_term_memory import ShortMemory
 from backend.tools.midi_tools import create_midi
-from backend.agent.prompts import SYSTEM_PROMPT
+from backend.agent.prompts import SYSTEM_PROMPT, CHOPIN_PROMPT
 
+set_debug(True)
 
 load_dotenv()
 
@@ -62,7 +64,10 @@ def render_midi(midi_path: str):
 
 
 
-def initialize_agent(model_name, api_key):
+def initialize_agent(model_name, api_key, chopin_mode: bool = False):
+    system_prompt = SYSTEM_PROMPT
+    if chopin_mode:
+        system_prompt = f"{SYSTEM_PROMPT}\n\nCHOPIN MODE ACTIVE - ROMANTIC PIANO STYLISTIC GUIDELINES:\n\n{CHOPIN_PROMPT}"
 
     model = create_llm(
         provider="google",
@@ -71,7 +76,7 @@ def initialize_agent(model_name, api_key):
     )
 
     memory = ShortMemory(
-        system_prompt=SYSTEM_PROMPT
+        system_prompt=system_prompt
     )
 
     return MusicAgent(
@@ -79,15 +84,6 @@ def initialize_agent(model_name, api_key):
         memory=memory,
         tools=[create_midi]
     )
-
-# # -------------------------
-# # Session Configuration
-# # -------------------------
-
-# if "session_id" not in st.session_state:
-#     st.session_state.session_id = str(uuid.uuid4())[:8]  
-#     st.session_state.user_dir = Path("midi_outputs") / st.session_state.session_id
-#     st.session_state.user_dir.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------
@@ -142,6 +138,12 @@ st.sidebar.markdown(
     "[Check the source code on GitHub](https://github.com/DimitrisTsiak/Co-Producer)"
 )
 
+chopin_mode = st.sidebar.toggle(
+    "Chopin Mode",
+    value=st.session_state.get("chopin_mode", False),
+    help="When activated, adds Chopin composition guidelines to the system prompt."
+)
+
 if not api_key:
     st.info("👈 Please enter your Google Gemini API key in the sidebar to start composing!")
     st.stop()
@@ -155,11 +157,13 @@ if "api_key" not in st.session_state:
 
 key_changed = api_key != st.session_state.api_key
 model_changed = selected_model != st.session_state.get("selected_model")
+mode_changed = chopin_mode != st.session_state.get("chopin_mode")
 
-if "agent" not in st.session_state or key_changed or model_changed:
+if "agent" not in st.session_state or key_changed or model_changed or mode_changed:
     st.session_state.selected_model = selected_model
     st.session_state.api_key = api_key
-    st.session_state.agent = initialize_agent(selected_model, api_key)
+    st.session_state.chopin_mode = chopin_mode
+    st.session_state.agent = initialize_agent(selected_model, api_key, chopin_mode=chopin_mode)
 
 
 if "messages" not in st.session_state:
