@@ -1,22 +1,51 @@
 from typing import Any
 from .base import Memory
 
+
 class ShortMemory(Memory):
 
-    def __init__(self, system_prompt: str | None = None):
+    def __init__(self, system_prompt: str | None = None, max_turns: int = 10):
+        self.system_prompt = system_prompt
+        self.max_turns = max_turns
         self.messages: list[Any] = []
 
-        if system_prompt:
+        if self.system_prompt:
             self.messages.append({
                 "role": "system",
-                "content": system_prompt
+                "content": self.system_prompt
             })
+
+    @staticmethod
+    def _is_user_message(message: Any) -> bool:
+        if isinstance(message, dict):
+            return message.get("role") == "user"
+        return getattr(message, "type", None) == "human"
+
+    def _trim(self) -> None:
+        if not self.max_turns or self.max_turns <= 0:
+            return
+
+        user_indices = [
+            i for i, msg in enumerate(self.messages)
+            if self._is_user_message(msg)
+        ]
+
+        if len(user_indices) > self.max_turns:
+            cutoff_index = user_indices[-self.max_turns]
+            system_prefix = [self.messages[0]] if self.system_prompt else []
+            self.messages = system_prefix + self.messages[cutoff_index:]
 
     def add(self, message: Any) -> None:
         self.messages.append(message)
+        self._trim()
 
     def get(self) -> list[Any]:
         return self.messages
 
     def clear(self) -> None:
         self.messages.clear()
+        if self.system_prompt:
+            self.messages.append({
+                "role": "system",
+                "content": self.system_prompt
+            })
