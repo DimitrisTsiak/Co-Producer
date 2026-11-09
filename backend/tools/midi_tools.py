@@ -1,123 +1,75 @@
-import pretty_midi
+"""MIDI generation tools and Pydantic schemas for the MusicAgent."""
+
+from pathlib import Path
+import uuid
+
 from langchain_core.tools import tool
 import pretty_midi
-from pathlib import Path
 from pydantic import BaseModel, Field
-import uuid
 
 
 class Note(BaseModel):
-    # pitch: int = Field(
-    #     ge=0,
-    #     le=127,
-    #     description="MIDI pitch number. C4 is 60."
-    # )
+    """Represents a single musical note in beat-based timing."""
+
     pitch: str = Field(
-    description="Musical pitch name, e.g. C4, D#4, Bb3."
+        description="Musical pitch name, e.g. C4, D#4, Bb3."
     )
-
-    # start: float = Field(
-    #     ge=0,
-    #     description="Start time of the note in seconds."
-    # )
-
-    # duration: float = Field(
-    #     gt=0,
-    #     description="Duration of the note in seconds."
-    # )
-
-    start: float = Field( 
-        ge=0, 
-        description="Start position in beats." 
-        ) 
-    
-    duration: float = Field( 
-        gt=0, 
-        description="Duration in beats." 
-        )
-
+    start: float = Field(
+        ge=0,
+        description="Start position in beats."
+    )
+    duration: float = Field(
+        gt=0,
+        description="Duration in beats."
+    )
     velocity: int = Field(
         default=100,
         ge=1,
         le=127,
-        description="MIDI velocity."
+        description="MIDI velocity (1-127)."
     )
+
+
+BASE_DIR = Path("midi_outputs").resolve()
 
 
 class MIDIRequest(BaseModel):
+    """Input schema for creating a MIDI file."""
 
     notes: list[Note] = Field(
-        description="List of notes that make up the melody."
+        min_length=1,
+        description="List of notes that make up the composition."
     )
-
     output_path: str = Field(
-        default="output.mid",
-        description="Path where the MIDI file should be saved."
+        default="midi_outputs/output.mid",
+        description="Path where the MIDI file should be saved (must be inside midi_outputs/)."
     )
-
     tempo: float = Field(
         default=120.0,
         gt=0,
         description="Tempo in beats per minute."
     )
-
-    time_signature: str = Field( 
-        default="4/4", 
-        description="Time signature, e.g. 4/4." 
-        )
-
+    time_signature: str = Field(
+        default="4/4",
+        description="Time signature, e.g. 4/4."
+    )
 
 
-
-# @tool
-# def create_midi(
-#     notes: list[dict],
-#     output_path: str = "output.mid",
-#     tempo: float = 120.0
-# ) -> str:
-#     """
-#     Create a MIDI file from musical notes.
-
-#     notes must contain pitch, start, duration and optionally velocity.
-#     pitch is a MIDI note number from 0 to 127.
-#     start and duration are measured in seconds.
-#     """
-#     # Check if the directory specified by the user exists
-#     # I could add safeguards here
-#     path = Path(output_path)
-#     path.parent.mkdir(parents=True, exist_ok=True)
-
-#     midi = pretty_midi.PrettyMIDI(initial_tempo=tempo)
-
-#     instrument = pretty_midi.Instrument(
-#         program=pretty_midi.instrument_name_to_program(
-#             "Acoustic Grand Piano"
-#         )
-#     )
-
-#     for n in notes:
-#         note = pretty_midi.Note(
-#             velocity=n.get("velocity", 100),
-#             pitch=n["pitch"],
-#             start=n["start"],
-#             end=n["start"] + n["duration"]
-#         )
-
-#         instrument.notes.append(note)
-
-#     midi.instruments.append(instrument)
-#     midi.write(output_path)
-
-#     return f"MIDI file created successfully: {output_path}"
+def pitch_to_midi(pitch: str | int) -> int:
+    """Convert a musical pitch name (e.g. 'C4') or MIDI number to a MIDI integer (0-127)."""
+    if isinstance(pitch, int) or (isinstance(pitch, str) and pitch.strip().isdigit()):
+        midi_num = int(pitch)
+        if not 0 <= midi_num <= 127:
+            raise ValueError(f"MIDI pitch number must be between 0 and 127, got {midi_num}.")
+        return midi_num
+    return pretty_midi.note_name_to_number(pitch.strip())
 
 
-
-def pitch_to_midi(pitch: str) -> int: 
-    "C4->60"
-    return pretty_midi.note_name_to_number(pitch)
-
-def beats_to_seconds(beats: float, tempo: float) -> float: 
-    seconds_per_beat = 60.0 / tempo 
+def beats_to_seconds(beats: float, tempo: float) -> float:
+    """Convert beats to seconds for a given tempo in BPM."""
+    if tempo <= 0:
+        raise ValueError("Tempo must be greater than 0.")
+    seconds_per_beat = 60.0 / tempo
     return beats * seconds_per_beat
 
 
@@ -129,10 +81,13 @@ def create_midi(request: MIDIRequest) -> str:
     Use this tool whenever the user asks to create or modify
     a MIDI file.
     """
+    base_dir = BASE_DIR.resolve()
+    target_file = Path(request.output_path).resolve()
 
-    path = Path(request.output_path)
+    if not target_file.is_relative_to(base_dir) or target_file == base_dir:
+        raise ValueError("Output path is outside the permitted directory.")
 
-    path.parent.mkdir(
+    target_file.parent.mkdir(
         parents=True,
         exist_ok=True
     )
@@ -141,6 +96,15 @@ def create_midi(request: MIDIRequest) -> str:
         initial_tempo=request.tempo
     )
 
+    if request.time_signature:
+        try:
+            num_str, den_str = request.time_signature.strip().split("/")
+            midi.time_signature_changes.append(
+                pretty_midi.TimeSignature(int(num_str), int(den_str), 0.0)
+            )
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid time_signature '{request.time_signature}'. Expected format like '4/4'.") from exc
+
     instrument = pretty_midi.Instrument(
         program=pretty_midi.instrument_name_to_program(
             "Acoustic Grand Piano"
@@ -148,33 +112,32 @@ def create_midi(request: MIDIRequest) -> str:
     )
 
     for note_data in request.notes:
-        pitch = pretty_midi.note_name_to_number(note_data.pitch)
+        pitch = pitch_to_midi(note_data.pitch)
 
-        start = beats_to_seconds( 
-            note_data.start, 
-            request.tempo 
-            ) 
-        duration = beats_to_seconds( 
-            note_data.duration, 
-            request.tempo 
-            )
+        start = beats_to_seconds(
+            note_data.start,
+            request.tempo
+        )
+        duration = beats_to_seconds(
+            note_data.duration,
+            request.tempo
+        )
 
-        note = pretty_midi.Note( 
-            velocity=note_data.velocity, 
-            pitch=pitch, 
-            start=start, 
-            end=start + duration )
+        note = pretty_midi.Note(
+            velocity=note_data.velocity,
+            pitch=pitch,
+            start=start,
+            end=start + duration
+        )
 
         instrument.notes.append(note)
 
     midi.instruments.append(instrument)
 
-    target_file = Path(request.output_path)
     unique_filename = f"{uuid.uuid4().hex[:6]}_{target_file.name}"
     path = target_file.parent / unique_filename
 
     midi.write(str(path))
-
 
     return str(path)
 
