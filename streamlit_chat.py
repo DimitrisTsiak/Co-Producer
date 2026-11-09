@@ -260,7 +260,15 @@ if user_input:
 
                 
         
-        response_text = result["content"][0]['text']
+        content = result.get("content", "")
+        if isinstance(content, list):
+            response_text = "\n".join(
+                block["text"] if isinstance(block, dict) and "text" in block else str(block)
+                for block in content
+                if not isinstance(block, dict) or "text" in block
+            )
+        else:
+            response_text = str(content)
         st.markdown(response_text)
 
         midi_path = result.get("midi_path")
