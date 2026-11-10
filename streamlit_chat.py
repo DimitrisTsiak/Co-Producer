@@ -184,6 +184,9 @@ st.caption(
 # Display conversation history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
+        if message.get("thoughts"):
+            with st.expander("Thinking Process", expanded=False):
+                st.markdown(message["thoughts"])
         st.markdown(message["content"]) 
         if message.get("midi_path"):
             render_midi(message["midi_path"])
@@ -212,76 +215,110 @@ if user_input:
     # Run agent
     with st.chat_message("assistant"):
 
-        with st.spinner("Composing..."):
+        thought_placeholder = st.empty()
+        status_placeholder = st.empty()
+        text_placeholder = st.empty()
+        midi_placeholder = st.empty()
 
-            try:
-                result = st.session_state.agent.invoke(user_input)
-                
-            except GoogleInvalidRequestError:
-                st.error("The provided API key is not valid. Please provide a valid Google API key.")
-                st.stop()
-            
-            except GoogleModelNotFoundError:
+        thoughts_accumulated = ""
+        text_accumulated = ""
+        midi_path = None
 
-                st.error(
-                    "The selected Gemini model is not available "
-                    "with your current API key.\n\n"
-                    "Please select another model from the **Gemini Model** "
-                    "menu in the sidebar."
-                )
-                st.stop()
+        status_placeholder.info(
+            "Waiting for response from the Gemini model... "
+            "If this takes longer than expected, consider selecting a different model from the sidebar."
+        )
 
-            except GoogleRateLimitError:
+        try:
+            for event in st.session_state.agent.stream(user_input):
+                event_type = event.get("type")
 
-                st.error(
-                    "⚠️ Gemini API rate limit reached.\n\n"
-                    "Please wait a moment and try again, or select another model."
-                )
-                st.stop()
+                if event_type == "thought":
+                    status_placeholder.empty()
+                    thoughts_accumulated += event.get("content", "")
+                    with thought_placeholder.expander("Thinking Process", expanded=True):
+                        st.markdown(thoughts_accumulated)
 
+                elif event_type == "tool_start":
+                    status_placeholder.info("Composing MIDI notes...")
 
-            except GoogleAPIError as e:
+                elif event_type == "midi_ready":
+                    midi_path = event.get("midi_path")
+                    status_placeholder.empty()
+                    with midi_placeholder.container():
+                        render_midi(midi_path)
 
-                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                elif event_type == "text_delta":
+                    status_placeholder.empty()
+                    text_accumulated += event.get("content", "")
+                    text_placeholder.markdown(text_accumulated)
 
-                    st.error(
-                        "⚠️ The selected Gemini model is temporarily unavailable.\n\n"
-                        "This usually means the model is experiencing high demand. "
-                        "Please wait a moment and try again, or select another model "
-                        "from the **Gemini Model** menu."
-                    )
-                    
+                elif event_type == "done":
+                    status_placeholder.empty()
+                    if not text_accumulated:
+                        raw_content = event.get("content", "")
+                        if isinstance(raw_content, list):
+                            text_accumulated = "\n".join(
+                                block["text"] if isinstance(block, dict) and "text" in block else str(block)
+                                for block in raw_content
+                                if not isinstance(block, dict) or "text" in block
+                            )
+                        else:
+                            text_accumulated = str(raw_content)
+                        text_placeholder.markdown(text_accumulated)
 
-                else:
+                    if not midi_path and event.get("midi_path"):
+                        midi_path = event.get("midi_path")
+                        with midi_placeholder.container():
+                            render_midi(midi_path)
 
-                    st.error(
-                        "⚠️ Gemini encountered an API error.\n\n"
-                        f"Details: {e}"
-                    )
+        except GoogleInvalidRequestError:
+            status_placeholder.empty()
+            st.error("The provided API key is not valid. Please provide a valid Google API key.")
+            st.stop()
 
-                st.stop()
-
-
-                
-        
-        content = result.get("content", "")
-        if isinstance(content, list):
-            response_text = "\n".join(
-                block["text"] if isinstance(block, dict) and "text" in block else str(block)
-                for block in content
-                if not isinstance(block, dict) or "text" in block
+        except GoogleModelNotFoundError:
+            status_placeholder.empty()
+            st.error(
+                "The selected Gemini model is not available "
+                "with your current API key.\n\n"
+                "Please select another model from the **Gemini Model** "
+                "menu in the sidebar."
             )
-        else:
-            response_text = str(content)
-        st.markdown(response_text)
+            st.stop()
 
-        midi_path = result.get("midi_path")
+        except GoogleRateLimitError:
+            status_placeholder.empty()
+            st.error(
+                "⚠️ Gemini API rate limit reached.\n\n"
+                "Please wait a moment and try again, or select another model."
+            )
+            st.stop()
 
-        if midi_path:
-            render_midi(midi_path)
+        except GoogleAPIError as e:
+            status_placeholder.empty()
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                st.error(
+                    "⚠️ The selected Gemini model is temporarily unavailable.\n\n"
+                    "This usually means the model is experiencing high demand. "
+                    "Please wait a moment and try again, or select another model "
+                    "from the **Gemini Model** menu."
+                )
+            else:
+                st.error(
+                    "⚠️ Gemini encountered an API error.\n\n"
+                    f"Details: {e}"
+                )
+            st.stop()
+
+        # Once complete, collapse the thinking box so it stays clean
+        if thoughts_accumulated:
+            with thought_placeholder.expander("Thinking Process", expanded=False):
+                st.markdown(thoughts_accumulated)
 
         st.session_state.messages.append({
             "role": "assistant",
-            "content": response_text,
-            "midi_path": midi_path
+            "content": text_accumulated,
+            "midi_path": midi_path,
+            "thoughts": thoughts_accumulated if thoughts_accumulated else None
         })

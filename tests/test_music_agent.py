@@ -293,3 +293,62 @@ class TestMusicAgentScenarios:
 
         assert result["content"] == blocks
         assert result["midi_path"] is None
+
+
+class TestMusicAgentStreaming:
+    """Tests for real-time thought and text streaming in MusicAgent."""
+
+    def test_stream_yields_thoughts_tool_and_done(self):
+        from langchain_core.messages import AIMessageChunk
+
+        class StreamingFakeLLM:
+            def __init__(self, streams: list):
+                self.streams = list(streams)
+
+            def bind_tools(self, tools):
+                return self
+
+            def stream(self, messages):
+                if not self.streams:
+                    raise RuntimeError("No more streams configured")
+                return iter(self.streams.pop(0))
+
+        chunks_turn_1 = [
+            AIMessageChunk(content=[{"type": "thinking", "thinking": "Planning a melody in D minor..."}]),
+            AIMessageChunk(content="", tool_call_chunks=[{
+                "name": "create_midi",
+                "args": '{"output_path": "midi_outputs/stream_test.mid"}',
+                "id": "c_stream_1",
+                "index": 0,
+            }]),
+        ]
+        chunks_turn_2 = [
+            AIMessageChunk(content="Here is "),
+            AIMessageChunk(content="your piece in D minor."),
+        ]
+
+        @tool
+        def create_midi(output_path: str = "midi_outputs/stream_test.mid") -> str:
+            """Mock create_midi tool."""
+            return output_path
+
+        model = StreamingFakeLLM([chunks_turn_1, chunks_turn_2])
+        agent = MusicAgent(model=model, memory=ShortMemory(), tools=[create_midi])
+
+        events = list(agent.stream("Play D minor"))
+        event_types = [e["type"] for e in events]
+
+        assert "thought" in event_types
+        assert "tool_start" in event_types
+        assert "midi_ready" in event_types
+        assert "text_delta" in event_types
+        assert "done" in event_types
+
+        thought_events = [e for e in events if e["type"] == "thought"]
+        assert thought_events[0]["content"] == "Planning a melody in D minor..."
+
+        midi_events = [e for e in events if e["type"] == "midi_ready"]
+        assert midi_events[0]["midi_path"] == "midi_outputs/stream_test.mid"
+
+        text_deltas = [e["content"] for e in events if e["type"] == "text_delta"]
+        assert "".join(text_deltas) == "Here is your piece in D minor."

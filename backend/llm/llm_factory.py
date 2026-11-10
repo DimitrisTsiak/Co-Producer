@@ -5,16 +5,21 @@ produce different CHATs for different API providers. Currently only supports Goo
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
-def create_llm(provider:str, api_key: str, name:str = "gemini-3.1-flash-lite", temperature:float = 1.0):
+def create_llm(
+    provider: str,
+    api_key: str,
+    name: str = "gemini-3.1-flash-lite",
+    temperature: float = 1.0,
+    include_thoughts: bool = True
+) -> ChatGoogleGenerativeAI:
     provider = provider.strip().lower()
 
     if provider == "google":
-        try:
-            return ChatGoogleGenerativeAI(
+        return ChatGoogleGenerativeAI(
             google_api_key=api_key,
             model=name,
-            temperature=temperature
+            temperature=temperature,
+            include_thoughts=include_thoughts
         )
-        except Exception as e:
-            print(f"There was an error when trying to connect to the API: {e}")
-            return e
+
+    raise ValueError(f"Unsupported LLM provider: '{provider}'. Supported providers: 'google'.")
