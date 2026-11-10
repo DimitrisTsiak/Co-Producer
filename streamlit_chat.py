@@ -159,11 +159,30 @@ key_changed = api_key != st.session_state.api_key
 model_changed = selected_model != st.session_state.get("selected_model")
 mode_changed = chopin_mode != st.session_state.get("chopin_mode")
 
-if "agent" not in st.session_state or key_changed or model_changed or mode_changed:
+if "agent" not in st.session_state:
     st.session_state.selected_model = selected_model
     st.session_state.api_key = api_key
     st.session_state.chopin_mode = chopin_mode
     st.session_state.agent = initialize_agent(selected_model, api_key, chopin_mode=chopin_mode)
+else:
+    if key_changed or model_changed:
+        st.session_state.selected_model = selected_model
+        st.session_state.api_key = api_key
+        new_model = create_llm(
+            provider="google",
+            api_key=api_key,
+            name=selected_model
+        )
+        st.session_state.agent.set_model(new_model)
+
+    if mode_changed:
+        st.session_state.chopin_mode = chopin_mode
+        system_prompt = (
+            f"{SYSTEM_PROMPT}\n\nCHOPIN MODE ACTIVE - ROMANTIC PIANO STYLISTIC GUIDELINES:\n\n{CHOPIN_PROMPT}"
+            if chopin_mode
+            else SYSTEM_PROMPT
+        )
+        st.session_state.agent.set_system_prompt(system_prompt)
 
 
 if "messages" not in st.session_state:

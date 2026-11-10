@@ -18,3 +18,8 @@ class Memory(ABC):
     def clear(self) -> None:
         """Clear the conversation history."""
         pass
+
+    @abstractmethod
+    def set_system_prompt(self, system_prompt: str | None) -> None:
+        """Update the system prompt without losing conversation history."""
+        pass

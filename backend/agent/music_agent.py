@@ -201,3 +201,13 @@ class MusicAgent:
     def clear_memory(self):
         self.memory.clear()
 
+    def set_model(self, model):
+        """Hot-swap the underlying LLM engine and re-bind tools."""
+        self.model = model
+        self.model_with_tools = model.bind_tools(list(self.tools.values()))
+
+    def set_system_prompt(self, system_prompt: str | None):
+        """Delegate system prompt updates to memory without losing history."""
+        if hasattr(self.memory, "set_system_prompt"):
+            self.memory.set_system_prompt(system_prompt)
+

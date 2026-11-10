@@ -44,6 +44,26 @@ class TestShortMemory:
         mem.clear()
         assert mem.get() == []
 
+    def test_set_system_prompt_preserves_messages(self):
+        mem = ShortMemory(system_prompt="Initial prompt")
+        mem.add({"role": "user", "content": "Keep this message"})
+        mem.set_system_prompt("Updated prompt")
+
+        messages = mem.get()
+        assert len(messages) == 2
+        assert messages[0] == {"role": "system", "content": "Updated prompt"}
+        assert messages[1] == {"role": "user", "content": "Keep this message"}
+
+    def test_set_system_prompt_when_none_initially_existed(self):
+        mem = ShortMemory()
+        mem.add({"role": "user", "content": "First message"})
+        mem.set_system_prompt("New system prompt")
+
+        messages = mem.get()
+        assert len(messages) == 2
+        assert messages[0] == {"role": "system", "content": "New system prompt"}
+        assert messages[1] == {"role": "user", "content": "First message"}
+
     def test_sliding_window_trims_by_turns_keeping_system_prompt(self):
         # max_turns=2 keeps the last 2 user turns
         mem = ShortMemory(system_prompt="SYS", max_turns=2)

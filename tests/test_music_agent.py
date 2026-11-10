@@ -282,6 +282,36 @@ class TestMusicAgentScenarios:
         agent.clear_memory()
         assert memory.get() == [{"role": "system", "content": "SYS"}]
 
+    def test_set_model_hot_swaps_llm_and_rebinds_tools(self):
+        @tool
+        def dummy_tool() -> str:
+            """Dummy."""
+            return "ok"
+
+        fake_1 = FakeLLM([])
+        fake_2 = FakeLLM([AIMessage(content="Response from model 2")])
+        agent = MusicAgent(model=fake_1, memory=ShortMemory(), tools=[dummy_tool])
+
+        assert agent.model is fake_1
+        assert fake_1.bound_tools == [dummy_tool]
+
+        agent.set_model(fake_2)
+        assert agent.model is fake_2
+        assert fake_2.bound_tools == [dummy_tool]
+
+        result = agent.invoke("Hello from model 2")
+        assert result["content"] == "Response from model 2"
+
+    def test_set_system_prompt_delegates_to_memory(self):
+        memory = ShortMemory(system_prompt="Initial")
+        memory.add({"role": "user", "content": "Keep me"})
+        agent = MusicAgent(model=FakeLLM([]), memory=memory, tools=[])
+
+        agent.set_system_prompt("New system prompt")
+        messages = memory.get()
+        assert messages[0] == {"role": "system", "content": "New system prompt"}
+        assert messages[1] == {"role": "user", "content": "Keep me"}
+
     def test_real_aimessage_list_content_is_passed_through(self):
         # Gemini can return content as a list of blocks; the agent passes it through
         # unchanged and the UI is responsible for extracting the text.

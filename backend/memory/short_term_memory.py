@@ -49,3 +49,19 @@ class ShortMemory(Memory):
                 "role": "system",
                 "content": self.system_prompt
             })
+
+    def set_system_prompt(self, system_prompt: str | None) -> None:
+        """Update the system prompt without losing conversation history."""
+        self.system_prompt = system_prompt
+        has_system = bool(
+            self.messages
+            and isinstance(self.messages[0], dict)
+            and self.messages[0].get("role") == "system"
+        )
+        if has_system:
+            if system_prompt:
+                self.messages[0] = {"role": "system", "content": system_prompt}
+            else:
+                self.messages.pop(0)
+        elif system_prompt:
+            self.messages.insert(0, {"role": "system", "content": system_prompt})
